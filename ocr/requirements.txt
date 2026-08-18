@@ -1,0 +1,11 @@
+# 试卷 OCR 框选服务依赖
+# 版本与本地已验证的 yolo-train venv 保持一致（paddleocr 3.7.0 + paddlepaddle 3.3.1 + numpy 2.x）
+paddlepaddle==3.3.1
+paddleocr==3.7.0
+opencv-python-headless==4.10.0.84
+numpy==2.2.6
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+# PDF 逐页转图（后端上传 PDF 时调用 /pdf-to-images）
+PyMuPDF==1.24.10

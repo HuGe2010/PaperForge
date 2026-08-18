@@ -1,0 +1,20 @@
+# 试卷 OCR 框选服务（PaddleOCR 两阶段）
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# 系统库：OpenCV 运行时 + PaddlePaddle CPU 所需的 OpenMP
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ocr/requirements.txt .
+# 用阿里云镜像源（清华源在当前网络 SSL 握手失败）；加大超时与重试，规避大 wheel 下载中断/损坏
+RUN pip install --no-cache-dir --timeout 120 --retries 5 -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+
+COPY ocr/app.py .
+
+EXPOSE 8000
+CMD ["python", "app.py"]

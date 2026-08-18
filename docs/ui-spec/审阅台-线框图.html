@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审阅台 · 布局线框图（供设计重稿参考）</title>
+<style>
+  :root {
+    --primary-600:#4F46E5; --primary-500:#6366F1; --primary-700:#4338CA;
+    --success:#16A34A; --warning:#D97706; --danger:#DC2626; --info:#2563EB;
+    --bg:#F8FAFC; --surface:#FFFFFF; --surface-2:#F1F5F9;
+    --text:#1E293B; --text-muted:#64748B; --text-subtle:#94A3B8;
+    --border:#E2E8F0; --border-strong:#CBD5E1;
+    --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+    --shadow-md:0 4px 12px rgba(15,23,42,.06);
+    --font:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); font-family:var(--font); color:var(--text); padding:32px 24px 64px; }
+  .doc-head { max-width:1320px; margin:0 auto 24px; }
+  .doc-head h1 { font-size:22px; margin:0 0 4px; }
+  .doc-head p { margin:0; color:var(--text-muted); font-size:13px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--text-muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .legend .l-dim { border:1px solid #E11D48; background:transparent; }
+  .legend .l-zone { background:rgba(79,70,229,.08); border:1px solid var(--primary-500); }
+  .legend .l-state { background:var(--danger); }
+
+  /* ============ 审阅台对话框模拟 ============ */
+  .stage { max-width:1320px; margin:0 auto; position:relative; }
+  .dialog {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-md); overflow:hidden;
+  }
+  .dialog__titlebar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 20px; border-bottom:1px solid var(--border);
+  }
+  .dialog__titlebar b { font-size:15px; }
+  .dialog__titlebar .x { color:var(--text-subtle); font-size:13px; }
+  .dialog__body { padding:16px 20px 24px; display:flex; flex-direction:column; gap:16px; }
+
+  /* --- ① 统一操作区 --- */
+  .zone-label { font-size:11px; font-weight:700; color:var(--danger); margin:0 0 4px; }
+  .toolbar {
+    display:flex; align-items:center; flex-wrap:wrap; gap:12px;
+    border:1px dashed var(--primary-500); background:rgba(79,70,229,.05);
+    border-radius:var(--radius-md); padding:8px;
+  }
+  .toolbar .lbl { font-size:13px; font-weight:600; color:var(--text-muted); }
+  .btn { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:5px 12px; border-radius:6px; cursor:default; white-space:nowrap; }
+  .btn.primary { background:var(--primary-600); color:#fff; }
+  .btn.default { background:#fff; border:1px solid var(--border-strong); color:var(--text); }
+  .btn.warning { background:#FDF6EC; border:1px solid #F0C890; color:var(--warning); }
+  .btn.success { background:var(--success); color:#fff; }
+  .btn.sm { padding:3px 8px; font-size:12px; }
+  .vdiv { width:1px; height:20px; background:var(--border-strong); }
+  .seg { display:inline-flex; align-items:center; font-size:12px; border-radius:4px; padding:3px 10px; border:1px solid var(--border-strong); color:var(--text-muted); }
+  .seg.active { background:var(--primary-600); color:#fff; border-color:var(--primary-600); }
+  .tip { font-size:12px; color:var(--text-subtle); }
+
+  /* --- ③ 提示条 --- */
+  .paper-bar { background:#F5F7FA; padding:8px 12px; border-radius:6px; font-size:13px; }
+  .paper-bar b { color:var(--primary-600); }
+
+  /* --- ④ 题目列表 --- */
+  .group-title {
+    font-size:15px; font-weight:700; padding:6px 0; border-bottom:2px solid var(--primary-600);
+    display:flex; align-items:baseline; gap:8px;
+  }
+  .group-title .cnt { font-size:12px; font-weight:400; color:var(--text-subtle); }
+  .card {
+    border:1px solid var(--border); border-radius:var(--radius-md); background:#fff;
+    padding:12px; display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; align-items:flex-start;
+  }
+  .img-zone {
+    flex:0 0 320px; max-width:42%; min-width:240px; border:1px solid var(--border);
+    border-radius:var(--radius-md); background:#F5F7FA; overflow:hidden; position:relative;
+  }
+  .img-zone .ph { aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; color:#B6C0CE; font-size:12px; }
+  .img-zone .hl {
+    position:absolute; border:2px solid #F56C6C; background:rgba(245,108,108,.15);
+    left:12%; top:16%; width:60%; height:30%;
+  }
+  .img-zone .hl .idx {
+    position:absolute; top:-20px; left:0; font-size:11px; font-weight:700; color:#fff;
+    background:#F56C6C; padding:0 6px; border-radius:3px; line-height:16px;
+  }
+  .fields { flex:1; min-width:300px; }
+  .item-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+  .item-idx { font-weight:700; font-size:15px; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:4px; }
+  .tag.warn { background:#FDF6EC; color:var(--warning); border:1px solid #F0C890; }
+  .tag.ok { background:#ECFDF3; color:var(--success); border:1px solid #A7E3C1; }
+  .conf { margin-left:auto; font-size:12px; color:var(--text-subtle); }
+
+  .form { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 16px; }
+  .form .full { grid-column:1 / -1; }
+  .f-item label { display:block; font-size:12px; color:var(--text-muted); padding-bottom:4px; }
+  .ctrl { border:1px solid var(--border-strong); border-radius:6px; background:#fff; font-size:12px; color:#A9B4C2; }
+  .ctrl.select { padding:6px 10px; display:flex; justify-content:space-between; align-items:center; }
+  .ctrl.textarea { padding:8px 10px; min-height:54px; line-height:1.5; }
+  .ctrl.textarea .katex-hint { color:#C7D0DC; }
+  .ctrl.input { padding:6px 10px; }
+  .stars { color:#F5A623; letter-spacing:2px; font-size:14px; padding:4px 2px; }
+  .opt-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .chk { width:14px; height:14px; border:1px solid var(--border-strong); border-radius:4px; display:inline-block; }
+  .opt-key { width:20px; text-align:center; font-weight:700; color:var(--primary-600); font-size:12px; }
+  .opt-input { flex:1; border:1px solid var(--border-strong); border-radius:6px; padding:5px 8px; font-size:12px; color:#A9B4C2; }
+  .opt-del { color:var(--danger); font-size:12px; cursor:default; }
+  .add-link { font-size:12px; color:var(--primary-600); }
+  .actions { display:flex; gap:8px; margin-top:12px; }
+  .actions .btn { font-size:12px; }
+
+  /* --- ⑤ 知识点建议 --- */
+  .sug-divider { display:flex; align-items:center; gap:12px; color:var(--text-subtle); font-size:13px; margin-top:8px; }
+  .sug-divider::before, .sug-divider::after { content:""; flex:1; height:1px; background:var(--border); }
+  .sug { display:flex; flex-wrap:wrap; gap:8px; }
+  .sug-tag { border:1px solid var(--border-strong); border-radius:4px; padding:2px 6px; font-size:12px; display:inline-flex; align-items:center; gap:4px; }
+  .sug-tag a { color:var(--success); font-size:11px; text-decoration:none; }
+  .sug-tag a.ignore { color:var(--text-subtle); }
+
+  /* ============ 尺寸标注 ============ */
+  .dim-h { position:relative; height:26px; margin:6px 0 2px; }
+  .dim-h .line { position:absolute; top:12px; left:0; right:0; border-top:1px solid #E11D48; }
+  .dim-h .tick { position:absolute; top:6px; width:1px; height:12px; background:#E11D48; }
+  .dim-h .tick.l { left:0; } .dim-h .tick.r { right:0; }
+  .dim-h .val { position:absolute; top:0; left:50%; transform:translateX(-50%); font-size:11px; color:#E11D48; font-weight:700; background:var(--bg); padding:0 4px; white-space:nowrap; }
+  .dim-v { position:absolute; width:26px; }
+  .dim-v .line { position:absolute; left:12px; top:0; bottom:0; border-left:1px solid #E11D48; }
+  .dim-v .tick { position:absolute; left:6px; width:12px; height:1px; background:#E11D48; }
+  .dim-v .val { position:absolute; top:50%; left:0; transform:translateY(-50%) rotate(180deg); writing-mode:vertical-rl; font-size:11px; color:#E11D48; font-weight:700; background:var(--bg); padding:0 4px; white-space:nowrap; }
+
+  .foot { max-width:1320px; margin:24px auto 0; font-size:12px; color:var(--text-muted); line-height:1.8; }
+  .foot code { background:var(--surface-2); padding:1px 6px; border-radius:4px; font-size:11px; }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>审阅台 · 布局线框图（annotated wireframe）</h1>
+  <p>来源：frontend/src/views/teacher/IngestView.vue（审阅台 1297–1553 行）· 配套文档：审阅台-布局规格.md · 此图可直接截图导入 Figma / MasterGo 作为底图重绘</p>
+  <div class="legend">
+    <span><i class="l-zone"></i> 功能区域</span>
+    <span><i class="l-dim"></i> 尺寸标注</span>
+    <span><i class="l-state"></i> 高亮框/危险色 #F56C6C</span>
+  </div>
+</div>
+
+<div class="stage">
+  <!-- 对话框整体尺寸标注 -->
+  <div class="dim-h"><span class="line"></span><span class="tick l"></span><span class="tick r"></span><span class="val">对话框宽 95% 视口（max-width 1320px 模拟）· 距顶 3vh · 高 ≤94vh</span></div>
+
+  <div class="dialog">
+    <!-- 标题栏 -->
+    <div class="dialog__titlebar">
+      <b>审阅台 · 2026高考数学模拟卷.pdf</b>
+      <span class="x">✕</span>
+    </div>
+
+    <div class="dialog__body">
+
+      <!-- ① 统一操作区 -->
+      <div>
+        <p class="zone-label">① 统一操作区 .review__toolbar — flex row / wrap / gap 12px（全部 small）</p>
+        <div class="toolbar">
+          <span class="lbl">统一操作：</span>
+          <span class="seg active">试卷</span>
+          <span class="seg">作业本</span>
+          <span class="ctrl input" style="width:170px">试卷名称…</span>
+          <span class="ctrl input" style="width:140px">统一学科 ▾</span>
+          <span class="btn primary">应用</span>
+          <span class="vdiv"></span>
+          <span class="btn warning">重新识别全部</span>
+          <span class="btn default">一键保存</span>
+          <span class="btn success">一键入库</span>
+          <span class="vdiv"></span>
+          <span class="btn default">合并题目</span>
+          <span class="tip">一键入库逐题检测重复，相同题目合并到来源试卷</span>
+        </div>
+      </div>
+
+      <!-- ③ 提示条 -->
+      <div class="paper-bar">本页识别试卷：<b>2026 高考数学全国卷 I</b>（可逐题覆盖）</div>
+
+      <!-- ④ 题目列表 -->
+      <div>
+        <p class="zone-label">④ 题目列表 .review__items — 按大题分组，组标题下 N 张题卡</p>
+        <div class="group-title">第 1 大题 <span class="cnt">（2 题）</span></div>
+
+        <!-- 题卡 1 -->
+        <div class="card">
+          <div class="img-zone">
+            <div class="ph">原图占位（320px 固定 / max 42% / min 240px）</div>
+            <div class="hl"><span class="idx">1</span></div>
+          </div>
+          <div class="fields">
+            <div class="item-head">
+              <span class="item-idx">1</span>
+              <span class="btn default sm">重新识别</span>
+              <span class="tag warn">待审阅</span>
+              <span class="conf">置信度 92%</span>
+            </div>
+            <div class="form">
+              <div class="f-item full">
+                <label>题型（识别按此题型提取内容）</label>
+                <span class="ctrl select">单选题 <span>▾</span></span>
+              </div>
+              <div class="f-item full">
+                <label>题干（输入框 · 公式用 $...$ 包裹）</label>
+                <div class="ctrl textarea">已知函数 f(x)=ax²+bx+c… <span class="katex-hint">（下方 MathText 公式实时预览）</span></div>
+              </div>
+              <div class="f-item full">
+                <label>选项（勾选正确项）</label>
+                <div>
+                  <div class="opt-row"><span class="chk"></span><span class="opt-key">A</span><span class="opt-input">选项内容…</span><span class="opt-del">✕</span></div>
+                  <div class="opt-row"><span class="chk"></span><span class="opt-key">B</span><span class="opt-input">选项内容…</span><span class="opt-del">✕</span></div>
+                  <div class="opt-row"><span class="chk"></span><span class="opt-key">C</span><span class="opt-input">选项内容…</span><span class="opt-del">✕</span></div>
+                  <span class="add-link">+ 选项</span>
+                </div>
+              </div>
+              <div class="f-item">
+                <label>难度</label>
+                <span class="stars">★★★☆☆</span>
+              </div>
+              <div class="f-item">
+                <label>所属试卷（题目来源）</label>
+                <span class="ctrl input">2023 高考数学全国卷 I</span>
+              </div>
+              <div class="f-item">
+                <label>学科</label>
+                <span class="ctrl select">数学 ▾</span>
+              </div>
+              <div class="f-item">
+                <label>知识点</label>
+                <span class="ctrl select">函数与导数 ▾</span>
+              </div>
+              <div class="f-item full">
+                <label>标签</label>
+                <span class="ctrl select">高考 · 压轴 ▾</span>
+              </div>
+            </div>
+            <div class="actions">
+              <span class="btn default">保存</span>
+              <span class="btn success">批准入题</span>
+              <span class="btn default" style="border-color:#F3C4C4;color:var(--danger);">拒绝</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 题卡 2（阅读理解为示例：左侧合并标记，右侧小题编辑） -->
+        <div class="card">
+          <div class="img-zone">
+            <div class="ph">原图占位（阅读题 · 跨页）</div>
+            <div class="hl" style="left:8%; top:22%; width:70%; height:40%;"><span class="idx">2</span></div>
+          </div>
+          <div class="fields">
+            <div class="item-head">
+              <span class="item-idx">2</span>
+              <span class="btn default sm">重新识别</span>
+              <span class="btn warning sm">撤销合并</span>
+              <span class="tag ok">已入库</span>
+              <span class="conf">置信度 87%</span>
+            </div>
+            <div class="form">
+              <div class="f-item full">
+                <label>题型</label>
+                <span class="ctrl select">阅读理解 <span>▾</span></span>
+              </div>
+              <div class="f-item full">
+                <label>小题（选择类可勾选正确项）</label>
+                <div style="border:1px dashed var(--border-strong);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:12px;">小题1</b><span class="ctrl select" style="width:130px;padding:3px 8px;">单选题 ▾</span><span class="opt-del">✕</span></div>
+                  <div class="ctrl textarea" style="min-height:40px;">小题题干…</div>
+                  <div class="opt-row"><span class="chk"></span><span class="opt-key">A</span><span class="opt-input">选项…</span></div>
+                  <div class="opt-row"><span class="chk"></span><span class="opt-key">B</span><span class="opt-input">选项…</span></div>
+                  <span class="add-link">+ 选项</span>
+                  <span class="add-link">+ 小题</span>
+                </div>
+              </div>
+              <div class="f-item">
+                <label>难度</label>
+                <span class="stars">★★★★☆</span>
+              </div>
+              <div class="f-item">
+                <label>所属试卷</label>
+                <span class="ctrl input">2026 高考数学全国卷 I</span>
+              </div>
+              <div class="f-item">
+                <label>学科</label>
+                <span class="ctrl select">数学 ▾</span>
+              </div>
+              <div class="f-item">
+                <label>知识点</label>
+                <span class="ctrl select">阅读理解 ▾</span>
+              </div>
+              <div class="f-item full">
+                <label>标签</label>
+                <span class="ctrl select">高考 · 阅读 ▾</span>
+              </div>
+            </div>
+            <div class="actions">
+              <span class="btn default">保存</span>
+              <span class="btn success" style="opacity:.55">批准入题</span>
+              <span class="btn default" style="border-color:#F3C4C4;color:var(--danger);opacity:.55">拒绝</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ AI 知识点建议 -->
+      <div>
+        <p class="zone-label">⑤ AI 知识点建议（待确认）</p>
+        <div class="sug-divider">AI 知识点建议（待确认）</div>
+        <div class="sug" style="margin-top:12px;">
+          <span class="sug-tag">函数与导数 <a>采纳</a><a class="ignore">忽略</a></span>
+          <span class="sug-tag">二次函数 <a>采纳</a><a class="ignore">忽略</a></span>
+          <span class="sug-tag">极值点偏移 <a>采纳</a><a class="ignore">忽略</a></span>
+          <span class="sug-tag">高考压轴 <a>采纳</a><a class="ignore">忽略</a></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 底部说明 -->
+  <div class="foot">
+    <b>关键布局参数（详见配套规格文档）：</b><br>
+    · 题卡左右对照：左图 <code>flex: 0 0 320px / max 42% / min 240px</code>，右表单 <code>flex: 1 / min 300px</code>，间隙 <code>16px</code>，窄屏自动上下堆叠（wrap）。<br>
+    · 表单 label 置顶（label-position=top），label 12px 次要色，表单项间距 12px。<br>
+    · 统一操作区 / 编辑控件全部 <code>size=small</code>；「合并题目」激活时显示勾选提示与合并按钮。<br>
+    · 题区高亮框：<code>2px #F56C6C + 15% 透明红底</code>，题号角标浮于框上方 <code>-20px</code>；框选编辑器用蓝 <code>#409EFF</code>、新画框绿虚线 <code>#67C23A</code>。<br>
+    · 主题令牌：主色靛蓝 <code>#4F46E5</code>（暗色 <code>#818CF8</code>），圆角 8/12/16px，8 点网格间距，阴影仅两级（sm/md）。<br>
+    · 审阅台打开期间每 4s 自动轮询刷新；正在编辑（dirty）的题不被服务端覆盖。
+  </div>
+</div>
+
+</body>
+</html>

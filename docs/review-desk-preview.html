@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>审阅台 · 紧凑化重设计预览</title>
+<style>
+  :root{
+    --c-primary:#4f46e5; --c-primary-50:#eef2ff; --c-primary-100:#e0e7ff;
+    --c-success:#16a34a; --c-warning:#d97706; --c-danger:#dc2626;
+    --c-bg:#f8fafc; --c-surface:#ffffff; --c-surface-2:#f1f5f9;
+    --c-text:#334155; --c-text-muted:#64748b; --c-text-subtle:#94a3b8;
+    --c-border:#e2e8f0; --c-border-strong:#cbd5e1;
+    --radius-md:12px; --radius-pill:999px;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.04);
+    --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;
+    --font-sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:var(--font-sans);background:var(--c-bg);color:var(--c-text);font-size:14px;line-height:1.6;padding:24px;}
+  .wrap{max-width:1180px;margin:0 auto;}
+  .note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px 14px;border-radius:10px;font-size:12px;margin-bottom:16px;}
+
+  /* 审阅台弹窗模拟 */
+  .dialog{background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;box-shadow:0 12px 40px rgba(15,23,42,.12);overflow:hidden;}
+  .dialog__title{padding:14px 20px;border-bottom:1px solid var(--c-border);font-weight:700;font-size:15px;}
+  .dialog__body{padding:16px;max-height:78vh;overflow:auto;display:flex;flex-direction:column;gap:var(--space-4);}
+
+  /* 头部 */
+  .review__header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;
+    background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);box-shadow:var(--shadow-sm);}
+  .review__meta{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;}
+  .review__meta-label{font-size:13px;font-weight:700;color:var(--c-text-muted);}
+  .review__meta-divider{width:1px;height:22px;background:var(--c-border);margin:0 2px;}
+  .seg{display:inline-flex;border:1px solid var(--c-border);border-radius:8px;overflow:hidden;}
+  .seg span{padding:3px 12px;font-size:12px;cursor:pointer;color:var(--c-text-muted);}
+  .seg span.on{background:var(--c-primary);color:#fff;}
+  .inp{border:1px solid var(--c-border);border-radius:8px;padding:5px 10px;font-size:12px;width:180px;color:var(--c-text);}
+  .sel{border:1px solid var(--c-border);border-radius:8px;padding:5px 10px;font-size:12px;width:150px;color:var(--c-text-muted);background:#fff;}
+  .btn{border:1px solid var(--c-border);background:#fff;border-radius:8px;padding:5px 14px;font-size:12px;cursor:pointer;color:var(--c-text);}
+  .btn.primary{background:var(--c-primary);border-color:var(--c-primary);color:#fff;}
+  .review__stats{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .stat{font-size:12px;color:var(--c-text-muted);background:var(--c-surface-2);border-radius:var(--radius-pill);padding:2px 10px;}
+  .stat b{color:var(--c-text);margin-left:2px;}
+  .stat--pending b{color:var(--c-warning);}
+  .stat--approved b{color:var(--c-success);}
+  .stat--rejected b{color:var(--c-danger);}
+  .stat--merged b{color:var(--c-primary);}
+  .review__flow{display:flex;align-items:center;gap:4px;margin:0;padding:0;list-style:none;flex-wrap:wrap;}
+  .review__flow li{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--c-text-muted);}
+  .review__flow li i{flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--c-primary-50);color:var(--c-primary);border:1px solid var(--c-primary-100);font-style:normal;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;}
+  .review__flow li:not(:last-child)::after{content:'→';color:var(--c-border-strong);margin:0 4px;}
+
+  /* 动作栏 */
+  .review__ops{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-2) var(--space-3);background:#f8fafc;border:1px solid var(--c-border);border-radius:var(--radius-md);}
+  .review__ops-actions{display:flex;align-items:center;gap:var(--space-2);}
+  .btn.warn{border-color:#fcd34d;color:#b45309;background:#fffbeb;}
+  .btn.success{background:var(--c-success);border-color:var(--c-success);color:#fff;}
+  .review__ops-tip{font-size:12px;color:var(--c-text-subtle);}
+
+  /* 主体两栏 */
+  .review__body{display:flex;gap:var(--space-4);align-items:flex-start;}
+  .review__main{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-3);}
+  .review__group-title{font-size:14px;font-weight:700;color:var(--c-text);padding:4px 0 4px 10px;border-left:3px solid var(--c-primary);}
+  .review__group-count{font-size:12px;font-weight:400;color:var(--c-text-subtle);margin-left:6px;}
+
+  .card{border:1px solid var(--c-border);border-radius:var(--radius-md);background:#fff;box-shadow:var(--shadow-sm);}
+  .card__body{padding:var(--space-3);display:flex;gap:var(--space-4);align-items:flex-start;flex-wrap:wrap;}
+  .img-col{flex:0 0 240px;max-width:38%;min-width:200px;display:flex;flex-direction:column;gap:var(--space-2);}
+  .img{position:relative;border:1px solid var(--c-border);border-radius:var(--radius-md);background:#f5f7fa;overflow:hidden;line-height:0;}
+  .img img{display:block;width:100%;height:auto;}
+  .hl{position:absolute;outline:2px solid #f56c6c;background:rgba(245,108,108,.15);}
+  .hl-idx{position:absolute;top:-18px;left:0;font-size:11px;font-weight:700;color:#fff;background:#f56c6c;padding:0 6px;border-radius:3px;line-height:16px;}
+  .fields{flex:1;min-width:300px;}
+  .item-head{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2);}
+  .idx{font-weight:700;font-size:15px;}
+  .chip{font-size:11px;padding:1px 8px;border-radius:999px;background:var(--c-surface-2);color:var(--c-text-muted);}
+  .chip.green{background:#dcfce7;color:#166534;}
+  .meta-row{display:flex;gap:var(--space-3);flex-wrap:wrap;}
+  .meta-row .f{flex:1 1 0;min-width:0;}
+  .meta-row .f.t{flex-basis:150px;max-width:180px;}
+  .meta-row .f.s{flex-basis:90px;max-width:110px;}
+  .meta-row .f.sub{flex-basis:180px;max-width:220px;}
+  .lab{font-size:12px;color:var(--c-text-muted);padding-bottom:2px;}
+  .ta{border:1px solid var(--c-border);border-radius:8px;padding:6px 8px;font-size:13px;min-height:54px;background:#fff;color:var(--c-text);}
+  .actions{display:flex;gap:var(--space-2);margin-top:var(--space-2);}
+
+  /* 右栏 */
+  .rail{flex:0 0 280px;width:280px;max-height:78vh;overflow:auto;position:sticky;top:0;border:1px solid var(--c-border);border-radius:var(--radius-md);background:var(--c-surface);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);box-shadow:var(--shadow-sm);}
+  .rail__head{display:flex;flex-direction:column;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--c-border);}
+  .rail__head-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;}
+  .rail__count{font-size:11px;font-weight:400;color:var(--c-text-subtle);}
+  .rail__hint{font-size:11px;color:var(--c-text-subtle);margin:0;line-height:1.5;}
+  .rail__legend{display:flex;gap:10px;margin:0;padding:0;list-style:none;flex-wrap:wrap;}
+  .rail__legend li{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--c-text-muted);}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block;}
+  .dot--normal{background:var(--c-primary);}
+  .dot--merged{background:var(--c-primary);box-shadow:0 0 0 1px #fff inset;border:1px dashed var(--c-primary);}
+  .dot--approved{background:var(--c-success);}
+  .rail__group{border:1px dashed var(--c-border);border-radius:6px;padding:6px;}
+  .rail__group-title{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;}
+  .rail__group-count{font-size:11px;color:var(--c-text-subtle);}
+  .rail__items{display:flex;flex-direction:column;gap:4px;margin-top:4px;}
+  .rail__item{display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:grab;border:1px solid var(--c-border);border-radius:4px;background:#f5f7fa;font-size:12px;}
+  .rail__item.no{font-weight:700;color:var(--c-primary);min-width:16px;text-align:right;}
+  .rail__item.ok{font-size:10px;color:#67c23a;}
+
+  /* 折叠建议 */
+  .sug{border:1px solid var(--c-border);border-radius:var(--radius-md);background:#fff;}
+  .sug__h{padding:0 14px;height:36px;display:flex;align-items:center;font-weight:700;font-size:13px;cursor:pointer;}
+  .sug__c{padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;}
+  .tag{border:1px solid var(--c-border);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--c-text);background:#fff;}
+  .tag b{color:var(--c-success);font-weight:400;margin-left:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="note">这是「审阅台」重设计静态预览（非运行产物）。对应真实改动在 <code>frontend/src/views/teacher/IngestView.vue</code>：头部拆分为试卷信息+状态概览+四步操作动线，主区新增集中动作栏，题卡与右栏紧凑化，知识点建议改为可折叠。</div>
+
+  <div class="dialog">
+    <div class="dialog__title">审阅台 · 2023 高考数学全国卷 I.pdf</div>
+    <div class="dialog__body">
+
+      <!-- 头部 -->
+      <div class="review__header">
+        <div class="review__meta">
+          <span class="review__meta-label">试卷信息</span>
+          <div class="seg"><span class="on">试卷</span><span>作业本</span></div>
+          <input class="inp" value="2023 高考数学全国卷 I" />
+          <div class="sel">统一学科：数学</div>
+          <button class="btn primary">应用</button>
+          <span class="review__meta-divider"></span>
+          <div class="review__stats">
+            <span class="stat stat--pending">待审阅 <b>8</b></span>
+            <span class="stat stat--approved">已入库 <b>3</b></span>
+            <span class="stat stat--rejected">已拒绝 <b>0</b></span>
+            <span class="stat stat--merged">合并题 <b>1</b></span>
+          </div>
+        </div>
+        <ol class="review__flow" aria-label="审阅操作动线">
+          <li><i>1</i>对照原图核对</li>
+          <li><i>2</i>修正题型 / 答案</li>
+          <li><i>3</i>右栏拖拽分组</li>
+          <li><i>4</i>一键入库</li>
+        </ol>
+      </div>
+
+      <!-- 动作栏 -->
+      <div class="review__ops">
+        <div class="review__ops-actions">
+          <button class="btn warn">重新识别全部</button>
+          <button class="btn">一键保存</button>
+          <button class="btn success">一键入库</button>
+        </div>
+        <span class="review__ops-tip">逐题检测重复并合并到来源试卷；跨页截断题请拖右栏题号合并</span>
+      </div>
+
+      <!-- 主体两栏 -->
+      <div class="review__body">
+        <div class="review__main">
+          <div class="review__group-title">选择题<span class="review__group-count">（5 题）</span></div>
+
+          <div class="card">
+            <div class="card__body">
+              <div class="img-col">
+                <div class="img">
+                  <img src="https://picsum.photos/seed/math1/480/360" alt="原图" />
+                  <div class="hl" style="left:4%;top:10%;width:92%;height:78%"><span class="hl-idx">1</span></div>
+                </div>
+              </div>
+              <div class="fields">
+                <div class="item-head">
+                  <span class="idx">1</span>
+                  <button class="btn">重新识别</button>
+                  <span class="chip green">待审阅</span>
+                  <span class="chip">置信度 92%</span>
+                </div>
+                <div class="meta-row">
+                  <div class="f t"><div class="lab">题型</div><div class="sel">单选题</div></div>
+                  <div class="f s"><div class="lab">得分</div><div class="inp" style="width:100%">5</div></div>
+                  <div class="f sub"><div class="lab">学科</div><div class="sel">数学</div></div>
+                </div>
+                <div class="lab" style="margin-top:8px">题干</div>
+                <div class="ta">已知集合 A={x|x²−3x+2≤0}，则 A∩B 的元素个数为……（公式用 $…$ 包裹）</div>
+                <div class="actions">
+                  <button class="btn">保存</button>
+                  <button class="btn success">批准入题</button>
+                  <button class="btn" style="color:var(--c-danger);border-color:#fecaca">拒绝</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="review__group-title">填空题<span class="review__group-count">（3 题）</span></div>
+          <div class="card">
+            <div class="card__body">
+              <div class="img-col">
+                <div class="img">
+                  <img src="https://picsum.photos/seed/math2/480/300" alt="原图" />
+                  <div class="hl" style="left:6%;top:14%;width:88%;height:70%"><span class="hl-idx">6</span></div>
+                </div>
+              </div>
+              <div class="fields">
+                <div class="item-head">
+                  <span class="idx">6</span>
+                  <button class="btn">重新识别</button>
+                  <span class="chip green">待审阅</span>
+                </div>
+                <div class="meta-row">
+                  <div class="f t"><div class="lab">题型</div><div class="sel">填空题</div></div>
+                  <div class="f s"><div class="lab">得分</div><div class="inp" style="width:100%">4</div></div>
+                  <div class="f sub"><div class="lab">学科</div><div class="sel">数学</div></div>
+                </div>
+                <div class="lab" style="margin-top:8px">题干</div>
+                <div class="ta">求函数 f(x)=ln x − x 的极大值点为 ______。</div>
+                <div class="actions">
+                  <button class="btn">保存</button>
+                  <button class="btn success">批准入题</button>
+                  <button class="btn" style="color:var(--c-danger);border-color:#fecaca">拒绝</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右栏 -->
+        <aside class="rail">
+          <div class="rail__head">
+            <div class="rail__head-title"><span>大题与题号</span><span class="rail__count">12 题</span></div>
+            <p class="rail__hint">按住题号拖动：移到「大题组」= 换大题；拖到另一题上 = 合并。</p>
+            <ul class="rail__legend">
+              <li><i class="dot dot--normal"></i>普通题</li>
+              <li><i class="dot dot--merged"></i>已合并</li>
+              <li><i class="dot dot--approved"></i>已入库</li>
+            </ul>
+          </div>
+          <div class="rail__group">
+            <div class="rail__group-title"><span>选择题</span><span class="rail__group-count">5 题</span></div>
+            <div class="rail__items">
+              <div class="rail__item"><span class="no">1</span><span>↑</span><span>↓</span></div>
+              <div class="rail__item"><span class="no">2</span><span>↑</span><span>↓</span></div>
+              <div class="rail__item"><span class="no">3</span><span>↑</span><span>↓</span></div>
+            </div>
+          </div>
+          <div class="rail__group">
+            <div class="rail__group-title"><span>填空题</span><span class="rail__group-count">3 题</span></div>
+            <div class="rail__items">
+              <div class="rail__item"><span class="no">6</span><span>↑</span><span>↓</span></div>
+              <div class="rail__item" style="border-style:dashed;border-color:var(--c-primary)"><span class="no">7</span><span>已合并</span></div>
+            </div>
+          </div>
+          <div class="rail__group">
+            <div class="rail__group-title"><span>解答题</span><span class="rail__group-count">4 题</span></div>
+            <div class="rail__items">
+              <div class="rail__item"><span class="no">9</span><span class="ok">已入库</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- 折叠建议 -->
+      <div class="sug">
+        <div class="sug__h">AI 知识点建议（待确认）<span class="stat" style="margin-left:6px">2</span></div>
+        <div class="sug__c">
+          <span class="tag">集合的交集 <b>采纳</b></span>
+          <span class="tag">对数函数的极值 <b>采纳</b></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
