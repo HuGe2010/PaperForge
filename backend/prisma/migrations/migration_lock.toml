@@ -1,0 +1,3 @@
+# 由 migrate diff 生成，标记本仓库迁移使用的数据库 provider。
+# 请勿手动修改 provider，否则 migrate deploy 会因 provider 不匹配而拒绝执行。
+provider = "postgresql"

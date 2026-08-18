@@ -1,0 +1,677 @@
+// Prisma schema — 智能试卷与试题整理系统
+// 单一真相源。覆盖 P1–P11 全部数据模型。
+// 说明：题型差异统一存于 questions.content (JSONB)，避免多表继承导致组卷/导出 UNION 爆炸。
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------- 枚举 -----------------------------
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  SHORT_ANSWER
+  ESSAY
+  MATERIAL
+  READING_COMPREHENSION
+}
+enum SourceType {
+  MANUAL
+  OCR
+  IMPORT
+}
+enum QuestionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+enum IngestJobStatus {
+  UPLOADED
+  PREPROCESSING
+  RECOGNIZING
+  SEGMENTING
+  TAGGING
+  REVIEWING
+  DONE
+  FAILED
+}
+enum OcrItemStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  MERGED
+  DISCARDED
+  DETECTED
+}
+enum PaperStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS
+  FINISHED
+  ARCHIVED
+}
+enum ExamSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+enum ExamSubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADING
+  GRADED
+  PENDING_MANUAL
+}
+enum GradingMethod {
+  AUTO
+  AI
+  MANUAL
+}
+enum GradingStatus {
+  PENDING
+  AUTO
+  AI_PENDING
+  AI_DONE
+  MANUAL
+  DONE
+}
+enum ImportTaskStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  PARTIAL
+}
+
+// ----------------------------- 认证 / RBAC -----------------------------
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  email        String?    @unique
+  passwordHash String
+  name         String?
+  avatarUrl    String?
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  roles          Role[]           @relation("UserRoles")
+  refreshTokens  RefreshToken[]
+  createdQuestions Question[]      @relation("QuestionAuthor")
+  ingestJobs     IngestJob[]      @relation("IngestAuthor")
+  importTasks    ImportTask[]     @relation("ImportAuthor")
+  examSessions   ExamSession[]
+  submissions    ExamSubmission[]
+  papers         Paper[]          @relation("PaperAuthor")
+  exams          Exam[]           @relation("ExamAuthor")
+  workbooks      Workbook[]       @relation("WorkbookAuthor")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique // ADMIN / TEACHER / STUDENT
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]       @relation("UserRoles")
+  permissions Permission[] @relation("RolePermissions")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique // e.g. question:create
+  name        String
+  group       String? // UI 分组：题库 / 试卷 / 考试 / 系统
+  createdAt   DateTime @default(now())
+
+  roles Role[] @relation("RolePermissions")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique // jti
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------- 学科 / 知识点 / 标签 -----------------------------
+model Subject {
+  id          String   @id @default(cuid())
+  name        String
+  code        String?  @unique
+  parentId    String?
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent         Subject?           @relation("SubjectTree", fields: [parentId], references: [id])
+  children       Subject[]         @relation("SubjectTree")
+  questions      Question[]
+  knowledgePoints KnowledgePoint[]
+  knowledgePointSuggestions KnowledgePointSuggestion[]
+  papers         Paper[]
+  ocrItems       OcrItem[]
+  ingestJobs     IngestJob[]
+  workbooks      Workbook[]
+}
+
+model KnowledgePoint {
+  id        String   @id @default(cuid())
+  subjectId String
+  name      String
+  parentId  String?
+  path      String // 物化路径，如 "1.3.5"，子树查询用 path LIKE '1.3.%'
+  level     Int      @default(1)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject  Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parent   KnowledgePoint? @relation("KpTree", fields: [parentId], references: [id])
+  children KnowledgePoint[] @relation("KpTree")
+  questions Question[]
+
+  @@index([subjectId])
+  @@index([path])
+}
+
+// AI 建议的新知识点（待确认，避免污染知识点树）
+model KnowledgePointSuggestion {
+  id        String   @id @default(cuid())
+  subjectId String
+  name      String
+  parentId  String?
+  suggestedBy String @default("ai")
+  status    String   @default("PENDING") // PENDING / APPROVED / REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  group     String?
+  createdAt DateTime @default(now())
+
+  questions Question[]
+}
+
+// ----------------------------- 试题 -----------------------------
+model Question {
+  id               String         @id @default(cuid())
+  type             QuestionType
+  stem             String // 题干，可含 $LaTeX$
+  content          Json // 题型相关：options/answer/blanks/rubric/material/subQuestions
+  analysis         String?
+  difficulty       Int            @default(3) // 1-5
+  subjectId        String?
+  sourceType       SourceType     @default(MANUAL)
+  sourceImagePath  String?
+  sourcePaperName  String? // 题目所属试卷（历史单值字段，保留兼容；新逻辑用 sourcePapers）
+  sourcePapers     String[]       @default([]) // 来源试卷（多值）：同一题可属于多张卷，去重合并时追加
+  number           Int? // 题号（排序用，不写入题干）
+  groupIndex       Int? // 大题号（试卷分组，如第一大题=1）
+  groupTitle       String? // 大题标题（如「一、选择题」）
+  sourceFileId     String? // 所属文件（录入任务，试卷/作业本）
+  // 作业本归属：workbookId + workbookSectionId 是唯一真相（章节重命名/移动不影响归属）。
+  // sourcePath 是由二者派生的「展示用名称路径」快照（[作业本名, 章节名, ...]），
+  // 由后端在改名 / 移动 / 归属变更时统一重算，前端只用于显示，不得用于归属判定。
+  sourcePath        String[]       @default([])
+  workbookId        String? // 归属作业本（独立实体）
+  workbook          Workbook?       @relation(fields: [workbookId], references: [id], onDelete: SetNull)
+  workbookSectionId String? // 归属章节（null = 作业本根，即未分章节）
+  workbookSection   WorkbookSection? @relation(fields: [workbookSectionId], references: [id], onDelete: SetNull)
+  ocrRaw           Json?
+  vlmModel         String?
+  llmModel         String? // 后台 AI 解答所用文本模型
+  solution         String? // 后台 AI 生成的解答 / 答题步骤
+  confidence       Float?
+  aiGenerated      Boolean        @default(false)
+  usageCount       Int            @default(0)
+  status           QuestionStatus @default(PUBLISHED)
+  version          Int            @default(1)
+  createdById      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  subject          Subject?           @relation(fields: [subjectId], references: [id])
+  createdBy        User?              @relation("QuestionAuthor", fields: [createdById], references: [id])
+  knowledgePoints  KnowledgePoint[]
+  tags             Tag[]
+  paperQuestions   PaperQuestion[]
+  ocrItems         OcrItem[]          @relation("OcrQuestion")
+  answerRecords    AnswerRecord[]
+  sourceFile       IngestJob?         @relation("QuestionSourceFile", fields: [sourceFileId], references: [id], onDelete: SetNull)
+
+  @@index([type, difficulty])
+  @@index([subjectId])
+  @@index([status])
+  @@index([sourceFileId])
+  @@index([workbookId])
+  @@index([workbookSectionId])
+}
+
+// ----------------------------- 题目查重（人工） -----------------------------
+// 被忽略的重复对：整组忽略时展开为组内所有两两对，逐对忽略只存一对。
+// 扫描疑似重复时据此排除，删除即撤销忽略。
+model DedupIgnore {
+  id          String   @id @default(cuid())
+  kind        String // GROUP | PAIR
+  questionIds String[] // 该次忽略涉及的题目 id（整组忽略为整组；逐对为 [a,b]）
+  pairs       String[] // 展开的两两对，用 "a|b" 表示无序对，扫描时据此排除
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// 合并操作日志：合并时把被吸收的题标记 ARCHIVED，保留快照以便整体撤销。
+model DedupMerge {
+  id          String   @id @default(cuid())
+  keptId      String // 保留的主题
+  absorbedIds String[] // 被吸收（归档）的题目 id
+  backup      Json // 合并前 kept 与 absorbed 的关键字段快照，用于撤销
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([keptId])
+  @@index([createdAt])
+}
+
+// 题目题干语义向量（查重第二层）：入库/编辑时异步计算，模型变更后批量重算。
+// 向量以 Float[] 存储（题库万级以内，内存余弦比对足够，无需 pgvector 扩展）。
+model QuestionEmbedding {
+  id         String   @id @default(cuid())
+  questionId String   @unique
+  model      String // 生成该向量的 embedding 模型名（模型更换后自动失效重算）
+  dims       Int // 向量维度
+  vector     Float[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([model])
+}
+
+// ----------------------------- OCR 录题流水线 -----------------------------
+model IngestJob {
+  id        String          @id @default(cuid())
+  fileName  String
+  fileType  String // pdf / image
+  fileSize  Int
+  status    IngestJobStatus @default(UPLOADED)
+  pageCount Int             @default(0)
+  sourceType String? // 文件类型：PAPER(试卷) / WORKBOOK(作业本)，审阅台统一操作区设置
+  subjectId  String?
+  workbookId String? // 选「是作业本」时指向已有作业本
+  workbookSectionId String? // 选「是作业本」时指向的具体章节（审批时按章节全路径写 sourcePath）
+  createdById String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  createdBy User?        @relation("IngestAuthor", fields: [createdById], references: [id])
+  subject   Subject?     @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  workbook  Workbook?     @relation(fields: [workbookId], references: [id], onDelete: SetNull)
+  @@index([workbookSectionId])
+  pages     IngestPage[]
+  items     OcrItem[]
+  sourceFileQuestions Question[] @relation("QuestionSourceFile")
+}
+
+model IngestPage {
+  id        String   @id @default(cuid())
+  jobId     String
+  pageNumber Int
+  imagePath String // 预处理（压缩）后的整页图
+  width     Int?
+  height    Int?
+  paperName String? // 自动框选时由 VLM 识别的试卷标题（人工可改）
+  figures   Json?   // 页面级图片框（与题目框解耦）：[{bbox:[x0,y0,x1,y1], cropId?, label?}]，框选阶段可手绘
+  createdAt DateTime @default(now())
+
+  job   IngestJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  items OcrItem[]
+
+  @@index([jobId])
+}
+
+model OcrItem {
+  id                String        @id @default(cuid())
+  jobId             String
+  pageId            String?
+  index             Int
+  status            OcrItemStatus @default(PENDING_REVIEW)
+  type              QuestionType?
+  stem              String?
+  content           Json?
+  analysis          String?
+  difficulty        Int?
+  subjectId         String? // AI 识别或人工标注的学科（与 Question 对齐）
+  bbox              Json? // [x0,y0,x1,y1] 归一化坐标
+  paperName         String? // 该题所属试卷（默认继承页面识别值，可逐题覆盖）
+  number            Int? // 题号（排序用，AI 识别后不写入题干）
+  groupIndex        Int? // 大题号（试卷分组，如第一大题=1）
+  groupTitle        String? // 大题标题（如「一、选择题」）
+  sectionId         String? // 所属作业本节点（层级叶子）
+  isTruncated       Boolean       @default(false)
+  confidence        Float?
+  sourceImagePath   String? // 裁出的单题图（向后兼容：未裁切时仍是整页图）
+  cropId            String? // 单题裁切随机 id，入库后作为题目的唯一 id
+  cropImagePath     String? // 按 bbox 裁出的单题图路径（UPLOAD_DIR/crops 下）
+  assignedQuestionId String? // 该题入库后对应的 Question id（去重合并时多个录题项可指向同一题，故不唯一）
+  mergedIntoId        String? // 被合并项 → 主项 id（合并后不删除，用于回退拆开）
+  mergedFromImagePath String? // 主项合并前的原图路径（回退恢复用）
+  mergedFromBbox      Json?   // 主项合并前的 bbox（回退恢复用）
+  figures             Json?   // 题内图片区域 [{bbox:[x0,y0,x1,y1], cropId?, label?}]，OCR 识别的题目附图
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  job      IngestJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  page     IngestPage?      @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  attempts OcrAttempt[]
+  question Question?         @relation("OcrQuestion", fields: [assignedQuestionId], references: [id])
+  subject  Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  section  WorkbookSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([status])
+  @@index([subjectId])
+  @@index([sectionId])
+}
+
+// 作业本：独立实体（拥有者 / 名称 / 学科 / 章节树）。
+// 章节树（WorkbookSection）归属作业本，而非某个录入任务；
+// 题目通过 Question.workbookId + Question.workbookSectionId 归属（外键，非名称路径）。
+model Workbook {
+  id        String   @id @default(cuid())
+  name      String
+  subjectId String?
+  ownerId   String?
+  description String?
+  createdById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject   Subject?    @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  createdBy User?       @relation("WorkbookAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  sections  WorkbookSection[]
+  questions Question[]
+  ingestJobs IngestJob[]
+
+  @@index([subjectId])
+  @@index([ownerId])
+}
+
+// 作业本层级节点（任意多级树形：作业本名 → 章节 → 次标题 → 次分区 → ...）
+model WorkbookSection {
+  id         String  @id @default(cuid())
+  workbookId String
+  parentId   String?
+  name       String
+  order      Int     @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workbook  Workbook          @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  parent    WorkbookSection?  @relation("WbTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  WorkbookSection[] @relation("WbTree")
+  items     OcrItem[]
+  questions Question[]
+
+  @@index([workbookId])
+  @@index([parentId])
+}
+
+model OcrAttempt {
+  id           String   @id @default(cuid())
+  ocrItemId    String
+  model        String // 使用的视觉模型
+  promptVersion String?
+  rawOutput    Json?
+  parsed       Json? // 归一化结果
+  confidence   Float?
+  status       String   @default("PENDING") // PENDING / SUCCESS / FAILED
+  error        String?
+  createdAt    DateTime @default(now())
+
+  ocrItem OcrItem @relation(fields: [ocrItemId], references: [id], onDelete: Cascade)
+
+  @@index([ocrItemId])
+}
+
+// ----------------------------- 试卷 / 组卷 -----------------------------
+model Paper {
+  id               String      @id @default(cuid())
+  title            String
+  description      String?
+  subjectId        String?
+  totalScore       Float       @default(0)
+  estimatedMinutes Int?
+  status           PaperStatus @default(DRAFT)
+  createdById      String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  createdBy User?          @relation("PaperAuthor", fields: [createdById], references: [id])
+  subject   Subject?       @relation(fields: [subjectId], references: [id])
+  questions PaperQuestion[]
+  exams     Exam[]
+
+  @@index([status])
+}
+
+model PaperQuestion {
+  id            String   @id @default(cuid())
+  paperId       String
+  questionId    String?
+  order         Int
+  score         Float    @default(0)
+  snapshot      Json? // 入卷时定格题目内容，后续改题不影响已出卷
+  createdAt     DateTime @default(now())
+
+  paper    Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  question Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([paperId])
+  @@index([questionId])
+}
+
+// ----------------------------- 在线考试 / 评分 -----------------------------
+model Exam {
+  id               String      @id @default(cuid())
+  title            String
+  paperId          String
+  description      String?
+  startTime        DateTime
+  endTime          DateTime
+  durationMinutes  Int
+  totalScore       Float       @default(0)
+  status           ExamStatus  @default(DRAFT)
+  shuffleQuestions Boolean     @default(true)
+  maxCheatSwitch   Int? // 允许的切屏次数（超出告警）
+  allowReview      Boolean     @default(true)
+  createdById      String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  createdBy User?           @relation("ExamAuthor", fields: [createdById], references: [id])
+  paper     Paper           @relation(fields: [paperId], references: [id])
+  sessions  ExamSession[]
+  submissions ExamSubmission[]
+
+  @@index([status])
+}
+
+model ExamSession {
+  id             String            @id @default(cuid())
+  examId         String
+  userId         String
+  token          String            @unique
+  questionOrder  Json? // 每人乱序后的题目顺序
+  status         ExamSessionStatus @default(IN_PROGRESS)
+  startedAt      DateTime?
+  submittedAt    DateTime?
+  ipAddress      String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  exam       Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submissions ExamSubmission[]
+
+  @@index([examId])
+  @@index([userId])
+}
+
+model ExamSubmission {
+  id              String               @id @default(cuid())
+  examId          String
+  sessionId       String?
+  userId          String
+  status          ExamSubmissionStatus @default(IN_PROGRESS)
+  score           Float?
+  objectiveScore  Float?
+  subjectiveScore Float?
+  autoGradedAt    DateTime?
+  gradedAt        DateTime?
+  submittedAt     DateTime?
+  durationSeconds Int?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  exam     Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  session  ExamSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers  AnswerRecord[]
+  gradingRecords GradingRecord[]
+  events   ExamEvent[]
+
+  @@index([examId])
+  @@index([userId])
+  @@index([status])
+}
+
+// 考试行为事件（切屏/复制/粘贴/离开视窗等，用于防作弊审计）
+model ExamEvent {
+  id           String   @id @default(cuid())
+  submissionId String
+  type         String // CHEAT_SWITCH / FULLSCREEN_EXIT / COPY / PASTE / TAB_HIDDEN / HEARTBEAT
+  detail       Json?
+  createdAt    DateTime @default(now())
+
+  submission ExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model AnswerRecord {
+  id              String   @id @default(cuid())
+  submissionId    String
+  questionId      String
+  paperQuestionId String?
+  content         Json? // 学生作答：选项 id / 文本 / 填空数组
+  isCorrect       Boolean?
+  score           Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  submission ExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question       @relation(fields: [questionId], references: [id])
+  gradingRecords GradingRecord[]
+
+  @@index([submissionId])
+}
+
+model GradingRecord {
+  id              String        @id @default(cuid())
+  submissionId    String
+  answerRecordId  String?
+  method          GradingMethod
+  score           Float?
+  breakdown       Json? // 逐评分点
+  reason          String?
+  confidence      Float?
+  model           String? // 使用的 LLM
+  status          GradingStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  submission   ExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  answerRecord AnswerRecord?  @relation(fields: [answerRecordId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([status])
+}
+
+// ----------------------------- 批量导入 / 系统设置 -----------------------------
+model ImportTask {
+  id           String           @id @default(cuid())
+  fileName     String
+  fileType     String
+  status       ImportTaskStatus @default(PENDING)
+  totalRows    Int              @default(0)
+  successRows  Int              @default(0)
+  failedRows   Int              @default(0)
+  reportPath   String? // 错误报告 xlsx
+  createdById  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  createdBy User? @relation("ImportAuthor", fields: [createdById], references: [id])
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  group       String // llm / vlm / system
+  key         String
+  value       String? // 密钥类加密存储
+  isSecret    Boolean  @default(false)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([group, key])
+}
+
+// ----------------------------- AI 任务日志（仪表盘工作进度） -----------------------------
+model AiTaskLog {
+  id        String   @id @default(cuid())
+  type      String // detect(框选) / recognize(识题) / solve(解答)
+  title     String // 文件名 / 题目标题
+  status    String   @default("RUNNING") // RUNNING / DONE / FAILED
+  percent   Int?     // 0-100
+  done      Int?     // 已完成单位数
+  total     Int?     // 总单位数
+  message   String?  // 进度描述 / 错误信息
+  jobId     String?  // 关联录入任务（可选）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([createdAt])
+}
