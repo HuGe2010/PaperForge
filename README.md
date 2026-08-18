@@ -207,7 +207,6 @@ npm run dev:frontend        # 前端 :5173
 ├── frontend/               # Vue 3 前端
 │   └── src/                # views / components / stores / api
 ├── ocr/                    # 试卷 OCR 框选服务（PaddleOCR）
-├── putout/                 # ⚠️ 历史部署副本（与根目录源码同步的重复副本，根 compose 不依赖它；如不需要可删除以减小体积）
 ├── docs/                   # 部署 / API / 导入模板 / 设计体系
 ├── v0.2.md                 # 本发布说明
 └── README.md               # 项目总览
