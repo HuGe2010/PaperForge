@@ -206,7 +206,6 @@ npm run dev:frontend        # 前端 :5173
 ├── frontend/               # Vue 3 前端
 │   └── src/                # views / components / stores / api
 ├── ocr/                    # 试卷 OCR 框选服务（PaddleOCR）
-├── putout/                 # ⚠️ 历史部署副本（与根目录源码同步的重复副本，根 compose 不依赖它；如不需要可删除以减小体积）
 ├── docs/                   # 部署 / API / 导入模板 / 设计体系
 ├── v0.2.md                 # 本发布说明
 └── README.md               # 项目总览
@@ -222,10 +221,3 @@ npm run dev:frontend        # 前端 :5173
 - `docs/api.md` — 接口约定
 - `docs/import-template.md` — 批量导入模板与标记语法
 - `docs/design-system.md` — 设计体系（设计令牌 / 主题 / 响应式）
-
----
-
-## 八、关于源码包
-
-- `v0.2-source.zip`：仅含被跟踪源码（约 1MB，577 个文件），已排除 `node_modules/`、`.env`、`data/`、`poc/`（750MB ML 轮子与模型权重）、`dist.bak*` 构建备份、`.workbuddy/`。直接解压即可 `docker compose up -d` 部署。
-- 仓库本身已是 git 仓库，已打标签 `v0.2`，可直接 `git remote add origin <地址>` 后 `git push --follow-tags`。
