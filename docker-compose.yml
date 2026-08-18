@@ -1,0 +1,135 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exam-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./docker/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 640m }
+    networks: [exam-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: exam-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 320m }
+    networks: [exam-net]
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: exam-backend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-1800}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-604800}
+      # 上传文件根目录（对应挂载卷 ./data/uploads）；本地开发可留空
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
+      # 文本模型（解题 / 打标签 / 评分）—— 仅默认值，非密钥
+      LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      LLM_MODEL_REASONING: ${LLM_MODEL_REASONING:-deepseek-v4-pro}
+      # 视觉模型（图片识题）—— 独立配置，可切换
+      VLM_PROVIDER: ${VLM_PROVIDER:-qwen}
+      VLM_BASE_URL: ${VLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      VLM_MODEL: ${VLM_MODEL:-qwen-vl-max}
+      # 试卷 OCR 框选服务地址（支撑「AI 框选题目」，无需 AI 密钥）
+      OCR_SERVICE_URL: ${OCR_SERVICE_URL:-http://ocr:8000}
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/exports:/app/exports
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 备用：接 NAS 本地 Ollama 时必需
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { memory: 1200m }
+    networks: [exam-net]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: exam-frontend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${WEB_PORT:-9280}:80"
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 128m }
+    networks: [exam-net]
+
+  # 试卷 OCR 框选服务（PaddleOCR 两阶段）：支撑「AI 框选题目」按钮，无需云端 AI 密钥
+  ocr:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ocr
+    container_name: exam-ocr
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      OCR_PORT: "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 90s   # PaddleOCR 首次加载模型约需数十秒
+    deploy:
+      resources:
+        # 3G：PaddleOCR 多模型驻留 + 1800x2322 大图推理峰值需 ~2G，1.5G 会被 OOM kill（exit 137）
+        limits: { memory: 3000m }
+    networks: [exam-net]
+
+networks:
+  exam-net:
+    driver: bridge

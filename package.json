@@ -1,0 +1,23 @@
+{
+  "name": "exam-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "智能试卷与试题整理系统 — 题库 / 智能组卷 / OCR 录题 / 在线考试 / 自动评分",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build:backend": "npm run build -w backend",
+    "build:frontend": "npm run build -w frontend",
+    "dev:backend": "npm run start:dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "prisma:generate": "npm run prisma:generate -w backend",
+    "prisma:migrate": "npm run prisma:migrate -w backend",
+    "prisma:seed": "npm run seed -w backend",
+    "typecheck:frontend": "npm run typecheck -w frontend"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
