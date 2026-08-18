@@ -64,7 +64,7 @@
 
 ## 三、如何部署（Docker Compose）
 
-> 部署入口就是仓库**根目录**的 `docker-compose.yml`，它直接从根上下文构建 `backend` / `frontend` / `ocr` 三个服务并自带 `postgres` / `redis`，**不依赖 `putout/` 目录**。
+> 部署入口就是ZIP压缩包**根目录**的 `docker-compose.yml`，它直接从根上下文构建 `backend` / `frontend` / `ocr` 三个服务并自带 `postgres` / `redis`，**不依赖 `putout/` 目录**。
 
 ### 3.1 标准部署步骤
 
@@ -223,10 +223,3 @@ npm run dev:frontend        # 前端 :5173
 - `docs/api.md` — 接口约定
 - `docs/import-template.md` — 批量导入模板与标记语法
 - `docs/design-system.md` — 设计体系（设计令牌 / 主题 / 响应式）
-
----
-
-## 八、关于源码包
-
-- `v0.2-source.zip`：仅含被跟踪源码（约 1MB，577 个文件），已排除 `node_modules/`、`.env`、`data/`、`poc/`（750MB ML 轮子与模型权重）、`dist.bak*` 构建备份、`.workbuddy/`。直接解压即可 `docker compose up -d` 部署。
-- 仓库本身已是 git 仓库，已打标签 `v0.2`，可直接 `git remote add origin <地址>` 后 `git push --follow-tags`。
